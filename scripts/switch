@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="agnoagi/agno-os"
+SOURCE_DIR="$HOME/labs/agno-os"
+TARGET_DIR="$HOME/labs/agno-os-preview"
+PORT=3000
+
+if [ $# -lt 1 ]; then
+  echo "Usage: switch <branch-name>"
+  echo "Clones $REPO into $TARGET_DIR, checks out the branch, and runs dev server."
+  exit 1
+fi
+
+BRANCH="$1"
+
+# Kill anything on port 3000
+if lsof -ti :"$PORT" &>/dev/null; then
+  echo "Killing process on port $PORT..."
+  lsof -ti :"$PORT" | xargs kill -9
+  sleep 1
+fi
+
+# Clone if the preview directory doesn't exist, otherwise just fetch
+if [ ! -d "$TARGET_DIR/.git" ]; then
+  echo "Cloning $REPO into $TARGET_DIR..."
+  rm -rf "$TARGET_DIR"
+  git clone "git@github.com:$REPO.git" "$TARGET_DIR"
+else
+  echo "Preview repo already exists, fetching latest..."
+  git -C "$TARGET_DIR" fetch --all --prune
+fi
+
+# Checkout the branch
+echo "Checking out branch: $BRANCH"
+git -C "$TARGET_DIR" checkout "$BRANCH" 2>/dev/null || git -C "$TARGET_DIR" checkout -b "$BRANCH" "origin/$BRANCH"
+git -C "$TARGET_DIR" pull origin "$BRANCH" --ff-only 2>/dev/null || true
+
+# Copy .env.local
+if [ -f "$SOURCE_DIR/.env.local" ]; then
+  echo "Copying .env.local..."
+  cp "$SOURCE_DIR/.env.local" "$TARGET_DIR/.env.local"
+else
+  echo "Warning: No .env.local found in $SOURCE_DIR"
+fi
+
+# Install dependencies
+echo "Installing dependencies..."
+(cd "$TARGET_DIR" && pnpm install)
+
+# Start dev server
+echo "Starting dev server on port $PORT..."
+(cd "$TARGET_DIR" && pnpm dev)

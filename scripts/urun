@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# urun - Shorthand for uv run
+# Usage: urun <script> [args...]
+
+uv run "$@"

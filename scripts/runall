@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# runall - Run all Python files in a directory with uv run
+# Usage: runall <directory>
+
+if [ $# -eq 0 ]; then
+    echo "Usage: runall <directory>"
+    echo "Example: runall cookbook/"
+    exit 1
+fi
+
+TARGET_DIR="$1"
+
+# Remove trailing slash if present
+TARGET_DIR="${TARGET_DIR%/}"
+
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Error: Directory '$TARGET_DIR' does not exist"
+    exit 1
+fi
+
+# Find all Python files in the directory
+PYTHON_FILES=$(find "$TARGET_DIR" -name "*.py" -type f | sort)
+
+if [ -z "$PYTHON_FILES" ]; then
+    echo "No Python files found in '$TARGET_DIR'"
+    exit 0
+fi
+
+echo "Running all Python files in '$TARGET_DIR'..."
+echo "----------------------------------------"
+
+# Run each Python file
+while IFS= read -r file; do
+    echo ""
+    echo "Running: $file"
+    echo "----------------------------------------"
+    uv run "$file"
+    EXIT_CODE=$?
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo "❌ Failed with exit code $EXIT_CODE"
+        echo "Continue? (y/n)"
+        read -r response
+        if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+            echo "Stopped by user"
+            exit $EXIT_CODE
+        fi
+    else
+        echo "✓ Completed successfully"
+    fi
+    echo "----------------------------------------"
+done <<< "$PYTHON_FILES"
+
+echo ""
+echo "All files processed!"

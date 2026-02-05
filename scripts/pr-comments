@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Fetch all comments from a GitHub PR URL for easy copy-paste into Claude Code
+# Usage: pr-comments <PR_URL>
+#   e.g. pr-comments https://github.com/org/repo/pull/123
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: pr-comments <PR_URL>" >&2
+  echo "  e.g. pr-comments https://github.com/org/repo/pull/123" >&2
+  exit 1
+fi
+
+PR_URL="$1"
+
+# Parse owner/repo and PR number from URL
+if [[ "$PR_URL" =~ github\.com/([^/]+/[^/]+)/pull/([0-9]+) ]]; then
+  REPO="${BASH_REMATCH[1]}"
+  PR_NUM="${BASH_REMATCH[2]}"
+else
+  echo "Error: Invalid GitHub PR URL" >&2
+  echo "Expected format: https://github.com/owner/repo/pull/123" >&2
+  exit 1
+fi
+
+echo "=== PR #${PR_NUM} in ${REPO} ==="
+echo ""
+
+# PR description
+echo "--- PR Description ---"
+gh pr view "$PR_NUM" --repo "$REPO" --json title,body --jq '"# " + .title + "\n\n" + (.body // "(no description)")'
+echo ""
+
+# Review comments (inline code comments)
+echo "--- Review Comments (inline) ---"
+gh api "repos/${REPO}/pulls/${PR_NUM}/comments" --paginate --jq '.[] | "**" + .user.login + "** on `" + .path + "` (line " + (.line // .original_line | tostring) + "):\n" + .body + "\n"' 2>/dev/null || echo "(none)"
+echo ""
+
+# Issue-style comments (conversation tab)
+echo "--- Conversation Comments ---"
+gh api "repos/${REPO}/issues/${PR_NUM}/comments" --paginate --jq '.[] | "**" + .user.login + "**:\n" + .body + "\n"' 2>/dev/null || echo "(none)"
+echo ""
+
+# Reviews (approve/request changes with body)
+echo "--- Reviews ---"
+gh api "repos/${REPO}/pulls/${PR_NUM}/reviews" --paginate --jq '.[] | select(.body != "" and .body != null) | "**" + .user.login + "** (" + .state + "):\n" + .body + "\n"' 2>/dev/null || echo "(none)"
