@@ -1,0 +1,62 @@
+#!/bin/bash
+
+echo "Stopping services..."
+
+# Kill processes on port 7777
+if lsof -ti:7777 > /dev/null 2>&1; then
+  lsof -ti:7777 | xargs kill -9 2>/dev/null
+  echo "Killed processes on port 7777"
+else
+  echo "Nothing running on port 7777"
+fi
+
+# Kill processes on port 3000
+if lsof -ti:3000 > /dev/null 2>&1; then
+  lsof -ti:3000 | xargs kill -9 2>/dev/null
+  echo "Killed processes on port 3000"
+else
+  echo "Nothing running on port 3000"
+fi
+
+# Stop Docker Desktop
+if pgrep -x "Docker" > /dev/null 2>&1; then
+  osascript -e 'quit app "Docker"' 2>/dev/null
+  echo "Stopped Docker Desktop"
+else
+  echo "Docker Desktop not running"
+fi
+
+# Quit Cursor
+if pgrep -x "Cursor" > /dev/null 2>&1; then
+  osascript -e 'quit app "Cursor"' 2>/dev/null
+  echo "Quit Cursor"
+else
+  echo "Cursor not running"
+fi
+
+# Kill Claude Code (node processes running claude)
+claude_pids=$(pgrep -f "claude" 2>/dev/null | grep -v $$ | grep -v $PPID)
+if [ -n "$claude_pids" ]; then
+  echo "$claude_pids" | xargs kill 2>/dev/null
+  echo "Killed Claude Code processes"
+else
+  echo "Claude Code not running"
+fi
+
+# Quit Slack
+if pgrep -x "Slack" > /dev/null 2>&1; then
+  osascript -e 'quit app "Slack"' 2>/dev/null
+  echo "Quit Slack"
+else
+  echo "Slack not running"
+fi
+
+# Quit WhatsApp
+if pgrep -x "WhatsApp" > /dev/null 2>&1; then
+  osascript -e 'quit app "WhatsApp"' 2>/dev/null
+  echo "Quit WhatsApp"
+else
+  echo "WhatsApp not running"
+fi
+
+echo "Done."
