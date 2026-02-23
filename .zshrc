@@ -20,3 +20,11 @@ alias pf='pnpm run format:fix && pnpm run validate'
 alias gs='git stash'
 alias gsa='git stash apply'
 alias cf="claude --dangerously-skip-permissions"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+# >>> Boo >>>
+if [[ -f "$HOME/.config/boo/boo.zsh" ]]; then
+  source "$HOME/.config/boo/boo.zsh"
+fi
+# <<< Boo <<<
