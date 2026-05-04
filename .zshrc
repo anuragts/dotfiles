@@ -23,6 +23,12 @@ alias cf="claude --dangerously-skip-permissions"
 
 export PATH="$HOME/.local/bin:$PATH"
 
+# Autosuggestions & syntax highlighting
+source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=#506477"
+
 # >>> Boo >>>
 if [[ -f "$HOME/.config/boo/boo.zsh" ]]; then
   source "$HOME/.config/boo/boo.zsh"

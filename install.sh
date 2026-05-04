@@ -13,6 +13,14 @@ fi
 ln -sf "$DOTFILES_DIR/.zshrc" "$HOME/.zshrc"
 echo "Linked .zshrc"
 
+# Symlink .zprofile
+if [ -f "$HOME/.zprofile" ] && [ ! -L "$HOME/.zprofile" ]; then
+  echo "Backing up existing .zprofile to .zprofile.backup"
+  cp "$HOME/.zprofile" "$HOME/.zprofile.backup"
+fi
+ln -sf "$DOTFILES_DIR/.zprofile" "$HOME/.zprofile"
+echo "Linked .zprofile"
+
 # Install scripts to ~/.local/bin and ~/bin
 mkdir -p "$HOME/.local/bin" "$HOME/bin"
 

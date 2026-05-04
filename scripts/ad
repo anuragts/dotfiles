@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+set -u
+
+DOCKER_WAIT_SECONDS="${DOCKER_WAIT_SECONDS:-90}"
+
+CONTAINERS=(
+  "agent-os-api-dev-redis"
+  "agent-os-api-dev-db"
+  "agent-os-api-dev-beat"
+  "agent-os-api-dev-worker"
+  "agent-os-api-dev"
+  "pgvector"
+)
+
+usage() {
+  cat <<'USAGE'
+Usage: ad [up|down|toggle|status|ids]
+
+Commands:
+  up       Open Docker Desktop if needed, start the saved containers, show IDs.
+  down     Stop the saved containers without removing them, then quit Docker.
+  toggle   Run down if any saved container is running, otherwise run up.
+  status   Show saved container state, ID, image, and ports.
+  ids      Print only container names and IDs.
+
+Default: toggle
+USAGE
+}
+
+have_docker_cli() {
+  command -v docker >/dev/null 2>&1
+}
+
+docker_ready() {
+  docker info >/dev/null 2>&1
+}
+
+docker_desktop_running() {
+  osascript -e 'application "Docker" is running' 2>/dev/null | grep -qi '^true$'
+}
+
+open_docker_desktop() {
+  if docker_desktop_running; then
+    printf 'Docker Desktop is already open. Waiting for the daemon...\n'
+  else
+    printf 'Opening Docker Desktop...\n'
+    open -a Docker >/dev/null 2>&1 || {
+      printf 'Could not open Docker Desktop. Is Docker.app installed?\n' >&2
+      return 1
+    }
+  fi
+
+  local waited=0
+  while ! docker_ready; do
+    if (( waited >= DOCKER_WAIT_SECONDS )); then
+      printf 'Docker daemon did not become ready within %s seconds.\n' "$DOCKER_WAIT_SECONDS" >&2
+      return 1
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+}
+
+ensure_docker_ready() {
+  if ! have_docker_cli; then
+    printf 'docker CLI was not found in PATH.\n' >&2
+    return 1
+  fi
+
+  if docker_ready; then
+    return 0
+  fi
+
+  open_docker_desktop
+}
+
+container_exists() {
+  docker inspect "$1" >/dev/null 2>&1
+}
+
+container_running() {
+  [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == "true" ]]
+}
+
+any_target_running() {
+  local name
+  for name in "${CONTAINERS[@]}"; do
+    if container_running "$name"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+ports_for() {
+  docker port "$1" 2>/dev/null | paste -sd ', ' -
+}
+
+show_status() {
+  if ! docker_ready; then
+    printf 'Docker daemon is not running.\n'
+    return 0
+  fi
+
+  printf '%-30s %-12s %-10s %-22s %s\n' "NAME" "ID" "STATE" "IMAGE" "PORTS"
+  local name id state image ports
+  for name in "${CONTAINERS[@]}"; do
+    if container_exists "$name"; then
+      id="$(docker inspect -f '{{.Id}}' "$name" | cut -c1-12)"
+      state="$(docker inspect -f '{{.State.Status}}' "$name")"
+      image="$(docker inspect -f '{{.Config.Image}}' "$name")"
+      ports="$(ports_for "$name")"
+      printf '%-30s %-12s %-10s %-22s %s\n' "$name" "$id" "$state" "$image" "$ports"
+    else
+      printf '%-30s %-12s %-10s %-22s %s\n' "$name" "-" "missing" "-" "-"
+    fi
+  done
+}
+
+show_ids() {
+  if ! docker_ready; then
+    printf 'Docker daemon is not running.\n' >&2
+    return 1
+  fi
+
+  local name id
+  for name in "${CONTAINERS[@]}"; do
+    if container_exists "$name"; then
+      id="$(docker inspect -f '{{.Id}}' "$name" | cut -c1-12)"
+      printf '%s %s\n' "$name" "$id"
+    else
+      printf '%s missing\n' "$name"
+    fi
+  done
+}
+
+start_containers() {
+  ensure_docker_ready || return 1
+
+  local name
+  for name in "${CONTAINERS[@]}"; do
+    if ! container_exists "$name"; then
+      printf 'Skipping missing container: %s\n' "$name" >&2
+      continue
+    fi
+
+    if container_running "$name"; then
+      printf 'Already running: %s\n' "$name"
+    else
+      printf 'Starting: %s\n' "$name"
+      docker start "$name" >/dev/null || return 1
+    fi
+  done
+
+  printf '\n'
+  show_status
+}
+
+stop_containers() {
+  if ! have_docker_cli; then
+    printf 'docker CLI was not found in PATH.\n' >&2
+    return 1
+  fi
+
+  if docker_ready; then
+    local name
+    for name in "${CONTAINERS[@]}"; do
+      if ! container_exists "$name"; then
+        printf 'Skipping missing container: %s\n' "$name" >&2
+        continue
+      fi
+
+      if container_running "$name"; then
+        printf 'Stopping: %s\n' "$name"
+        docker stop "$name" >/dev/null || return 1
+      else
+        printf 'Already stopped: %s\n' "$name"
+      fi
+    done
+  else
+    printf 'Docker daemon is already down.\n'
+  fi
+
+  if docker_desktop_running; then
+    printf 'Quitting Docker Desktop...\n'
+    osascript -e 'tell application "Docker" to quit' >/dev/null 2>&1 || true
+  else
+    printf 'Docker Desktop is already quit.\n'
+  fi
+}
+
+action="${1:-toggle}"
+
+case "$action" in
+  up|start)
+    start_containers
+    ;;
+  down|stop)
+    stop_containers
+    ;;
+  toggle)
+    if docker_ready && any_target_running; then
+      stop_containers
+    else
+      start_containers
+    fi
+    ;;
+  status|ps)
+    show_status
+    ;;
+  ids)
+    show_ids
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    printf 'Unknown command: %s\n\n' "$action" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
