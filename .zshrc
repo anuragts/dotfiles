@@ -20,6 +20,7 @@ alias pf='pnpm run format:fix && pnpm run validate'
 alias gs='git stash'
 alias gsa='git stash apply'
 alias cf="claude --dangerously-skip-permissions"
+alias cy="codex --yolo"
 
 export PATH="$HOME/.local/bin:$PATH"
 
