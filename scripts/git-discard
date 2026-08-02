@@ -6,9 +6,9 @@ usage() {
   cat <<'EOF'
 Usage: git discard [-s | -yolo]
 
-Clear local changes in the current Git worktree.
+Clear local changes in the current Git worktree only.
 
-  -s, --stash    Stash tracked, untracked, and ignored files (default)
+  -s, --stash    Stash tracked/untracked files and discard ignored files (default)
   -yolo, --yolo  Permanently discard tracked, untracked, and ignored files
   -h, --help     Show this help
 EOF
@@ -46,18 +46,47 @@ fi
 
 cd "$worktree_root"
 
+# A linked worktree can live inside the current worktree as an untracked
+# directory. Exclude those paths so this command never enters or modifies them.
+worktree_exclusions=$(mktemp "${TMPDIR:-/tmp}/git-discard.XXXXXX")
+trap 'rm -f "$worktree_exclusions"' EXIT HUP INT TERM
+
+git worktree list --porcelain | while IFS= read -r line; do
+  case "$line" in
+    "worktree $worktree_root/"*)
+      printf '%s\n' "${line#worktree "$worktree_root"/}"
+      ;;
+  esac
+done >"$worktree_exclusions"
+
+add_clean_exclusions() {
+  while IFS= read -r relative_path; do
+    [ -n "$relative_path" ] || continue
+    set -- "$@" -e "$relative_path/"
+  done <"$worktree_exclusions"
+  git clean "$@"
+}
+
 if [ "$mode" = "stash" ]; then
   stash_message="git discard: $(date '+%Y-%m-%d %H:%M:%S %z')"
-  if ! git stash push --all --message "$stash_message"; then
+
+  set -- ':(top)**'
+  while IFS= read -r relative_path; do
+    [ -n "$relative_path" ] || continue
+    set -- "$@" ":(top,exclude)$relative_path" ":(top,exclude)$relative_path/**"
+  done <"$worktree_exclusions"
+
+  if ! git stash push --include-untracked --message "$stash_message" -- "$@"; then
     printf 'git discard: stash failed; no destructive fallback was run\n' >&2
     exit 1
   fi
-  printf 'git discard: local changes safely stashed\n'
+  add_clean_exclusions -qfdx
+  printf 'git discard: local changes stashed; ignored files discarded\n'
   exit 0
 fi
 
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
   git reset --hard HEAD
 fi
-git clean -fdx
+add_clean_exclusions -qfdx
 printf 'git discard: all local changes permanently discarded\n'
