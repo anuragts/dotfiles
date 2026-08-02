@@ -1,0 +1,63 @@
+#!/bin/sh
+
+set -eu
+
+usage() {
+  cat <<'EOF'
+Usage: git discard [-s | -yolo]
+
+Clear local changes in the current Git worktree.
+
+  -s, --stash    Stash tracked, untracked, and ignored files (default)
+  -yolo, --yolo  Permanently discard tracked, untracked, and ignored files
+  -h, --help     Show this help
+EOF
+}
+
+mode=stash
+
+case "${1-}" in
+  ""|-s|--stash)
+    ;;
+  -yolo|--yolo)
+    mode=yolo
+    ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    printf 'git discard: unknown option: %s\n\n' "$1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+if [ "$#" -gt 1 ]; then
+  printf 'git discard: expected at most one option\n\n' >&2
+  usage >&2
+  exit 2
+fi
+
+if ! worktree_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  printf 'git discard: not inside a Git worktree\n' >&2
+  exit 1
+fi
+
+cd "$worktree_root"
+
+if [ "$mode" = "stash" ]; then
+  stash_message="git discard: $(date '+%Y-%m-%d %H:%M:%S %z')"
+  if ! git stash push --all --message "$stash_message"; then
+    printf 'git discard: stash failed; no destructive fallback was run\n' >&2
+    exit 1
+  fi
+  printf 'git discard: local changes safely stashed\n'
+  exit 0
+fi
+
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  git reset --hard HEAD
+fi
+git clean -fdx
+printf 'git discard: all local changes permanently discarded\n'
